@@ -15,8 +15,12 @@ from app.repositories.models.bookings import Booking
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Создаёт таблицы базы данных при запуске приложения"""
 
-    Base.metadata.create_all(bind=engine)
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
     yield
+
+    await engine.dispose()
 
 
 app: FastAPI = FastAPI(lifespan=lifespan)

@@ -3,11 +3,12 @@
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.dao.bookings import BookingDAO
 from app.repositories.database import get_db
 from app.repositories.schemas.bookings import BookingCreate, BookingResponse
+
 
 bookings_router: APIRouter = APIRouter(
     prefix="/bookings",
@@ -20,49 +21,51 @@ bookings_router: APIRouter = APIRouter(
     response_model=BookingResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def add_booking(
+async def add_booking(
     booking: BookingCreate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> BookingResponse:
     """Создаёт новую бронь"""
 
-    if BookingDAO.has_active_booking(
+    is_occupied: bool = await BookingDAO.has_active_booking(
         db,
         booking.booking_date,
         booking.booking_time,
-    ):
+    )
+
+    if is_occupied:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Booking slot is already occupied",
         )
 
-    return BookingDAO.create(db, booking)
+    return await BookingDAO.create(db, booking)
 
 
 @bookings_router.get(
     "",
     response_model=list[BookingResponse],
 )
-def get_bookings(
+async def get_bookings(
     booking_date: date | None = Query(default=None, alias="date"),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> list[BookingResponse]:
-    """Возвращает список броней с фильтрацией по дате"""
+    """Возвращает список броней"""
 
-    return BookingDAO.get_all(db, booking_date)
+    return await BookingDAO.get_all(db, booking_date)
 
 
 @bookings_router.get(
     "/{booking_id}",
     response_model=BookingResponse,
 )
-def get_booking(
+async def get_booking(
     booking_id: int = Path(..., gt=0),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> BookingResponse:
     """Возвращает бронь по идентификатору"""
 
-    booking = BookingDAO.get_by_id(db, booking_id)
+    booking = await BookingDAO.get_by_id(db, booking_id)
 
     if booking is None:
         raise HTTPException(
@@ -77,13 +80,13 @@ def get_booking(
     "/{booking_id}",
     response_model=BookingResponse,
 )
-def cancel_booking(
+async def cancel_booking(
     booking_id: int = Path(..., gt=0),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ) -> BookingResponse:
-    """Отменяет бронь без физического удаления записи"""
+    """Отменяет бронь без физического удаления"""
 
-    booking = BookingDAO.get_by_id(db, booking_id)
+    booking = await BookingDAO.get_by_id(db, booking_id)
 
     if booking is None:
         raise HTTPException(
@@ -91,4 +94,4 @@ def cancel_booking(
             detail="Booking not found",
         )
 
-    return BookingDAO.cancel(db, booking)
+    return await BookingDAO.cancel(db, booking)

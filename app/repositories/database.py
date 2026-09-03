@@ -1,22 +1,32 @@
 """Подключение к базе данных"""
 
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 
-from sqlalchemy import create_engine, Engine
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy import Engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import DATABASE_URL
 
 
-engine: Engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},
+ASYNC_DATABASE_URL: str = DATABASE_URL.replace(
+    "sqlite:///",
+    "sqlite+aiosqlite:///",
 )
 
-SessionLocal: sessionmaker[Session] = sessionmaker(
+engine: AsyncEngine = create_async_engine(
+    ASYNC_DATABASE_URL,
+    echo=False,
+)
+
+SessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
     bind=engine,
-    autocommit=False,
-    autoflush=False,
+    expire_on_commit=False,
 )
 
 
@@ -26,11 +36,8 @@ class Base(DeclarativeBase):
     pass
 
 
-def get_db() -> Generator[Session, None, None]:
-    """Возвращает сессию базы данных для запроса"""
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    """Возвращает асинхронную сессию базы данных"""
 
-    db = SessionLocal()
-    try:
+    async with SessionLocal() as db:
         yield db
-    finally:
-        db.close()

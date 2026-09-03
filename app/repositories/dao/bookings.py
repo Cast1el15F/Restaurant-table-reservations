@@ -3,7 +3,7 @@
 from datetime import date, time
 
 from sqlalchemy import Select, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.models.bookings import Booking
 from app.repositories.schemas.bookings import BookingCreate
@@ -13,22 +13,26 @@ class BookingDAO:
     """Объект доступа к данным броней"""
 
     @staticmethod
-    def create(db: Session, booking_data: BookingCreate) -> Booking:
+    async def create(
+        db: AsyncSession,
+        booking_data: BookingCreate,
+    ) -> Booking:
         """Создаёт и сохраняет бронь"""
 
         booking: Booking = Booking(
             **booking_data.model_dump(),
             status="active",
         )
+
         db.add(booking)
-        db.commit()
-        db.refresh(booking)
+        await db.commit()
+        await db.refresh(booking)
 
         return booking
 
     @staticmethod
-    def get_all(
-        db: Session,
+    async def get_all(
+        db: AsyncSession,
         booking_date: date | None = None,
     ) -> list[Booking]:
         """Возвращает все брони с необязательной фильтрацией по дате"""
@@ -41,27 +45,36 @@ class BookingDAO:
         if booking_date is not None:
             query = query.where(Booking.booking_date == booking_date)
 
-        return list(db.scalars(query).all())
+        result = await db.scalars(query)
+
+        return list(result.all())
 
     @staticmethod
-    def get_by_id(db: Session, booking_id: int) -> Booking | None:
+    async def get_by_id(
+        db: AsyncSession,
+        booking_id: int,
+    ) -> Booking | None:
         """Возвращает бронь по идентификатору"""
 
-        return db.get(Booking, booking_id)
+        return await db.get(Booking, booking_id)
 
     @staticmethod
-    def cancel(db: Session, booking: Booking) -> Booking:
+    async def cancel(
+        db: AsyncSession,
+        booking: Booking,
+    ) -> Booking:
         """Изменяет статус брони на cancelled"""
 
         booking.status = "cancelled"
-        db.commit()
-        db.refresh(booking)
+
+        await db.commit()
+        await db.refresh(booking)
 
         return booking
 
     @staticmethod
-    def has_active_booking(
-        db: Session,
+    async def has_active_booking(
+        db: AsyncSession,
         booking_date: date,
         booking_time: time,
     ) -> bool:
@@ -73,4 +86,6 @@ class BookingDAO:
             Booking.status == "active",
         )
 
-        return db.scalar(query) is not None
+        booking_id: int | None = await db.scalar(query)
+
+        return booking_id is not None
